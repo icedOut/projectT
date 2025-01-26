@@ -12,16 +12,16 @@ const App = () => {
   const sceneRef = useRef(null);
   const cameraRef = useRef(null);
   const rendererRef = useRef(null);
-  const usersRefs = useRef({});
+  const usersRefs = useRef({}); // To store 3D objects for each user
 
-  // Handle input change for username
+  const userPosition = useRef({ x: 0, y: 0, z: 0 });
+
   const handleInputChange = (e) => {
     const value = e.target.value;
     setUserName(value);
     setIsValidName(value.length >= 3);
   };
 
-  // Handle name submit button click
   const handleNameSubmit = () => {
     if (isValidName && socket.current) {
       socket.current.emit('setName', userName);
@@ -29,7 +29,6 @@ const App = () => {
     }
   };
 
-  // Handle key press for Enter submission
   const handleKeyPress = (e) => {
     if (e.key === 'Enter' && isValidName) {
       e.preventDefault();
@@ -37,33 +36,59 @@ const App = () => {
     }
   };
 
+  const handleMovement = (e) => {
+    const moveSpeed = 0.1;
+
+    // Update the user position based on the key pressed
+    if (e.key === 'w' || e.key === 'ArrowUp') {
+      userPosition.current.z -= moveSpeed;
+    } else if (e.key === 's' || e.key === 'ArrowDown') {
+      userPosition.current.z += moveSpeed;
+    } else if (e.key === 'a' || e.key === 'ArrowLeft') {
+      userPosition.current.x -= moveSpeed;
+    } else if (e.key === 'd' || e.key === 'ArrowRight') {
+      userPosition.current.x += moveSpeed;
+    }
+
+    // Emit the updated position to the server
+    if (socket.current) {
+      socket.current.emit('move', userPosition.current);
+    }
+  };
+
   useEffect(() => {
     // Initialize socket connection
-    socket.current = io('http://localhost:3001');
-    
-    // Log when the socket connects
+    socket.current = io('http://localhost:3001', {
+      withCredentials: true
+    });
+
     socket.current.on('connect', () => {
       console.log('Socket connected:', socket.current.id);
     });
 
-    // Handle updated user list
     socket.current.on('userList', (users) => {
-      console.log('Updated users list received:', users);
+      console.log('Updated user list from server:', users);
       setConnectedUsers(users);
 
-      // Add or remove Three.js spheres based on the updated user list
-      users.forEach((user, index) => {
+      users.forEach((user) => {
         if (!usersRefs.current[user.id]) {
           const geometry = new THREE.SphereGeometry(0.5);
-          const material = new THREE.MeshBasicMaterial({ color: Math.random() * 0xffffff });
+          const material = new THREE.MeshLambertMaterial({ color: Math.random() * 0xffffff });
           const sphere = new THREE.Mesh(geometry, material);
-          sphere.position.set(index * 2 - users.length, 0, 0);
+
+          const x = user.x != null ? user.x : 0;
+          const z = user.z != null ? user.z : 0;
+          sphere.position.set(x, 0.5, z);
+
           sceneRef.current.add(sphere);
           usersRefs.current[user.id] = sphere;
+        } else {
+          const x = user.x != null ? user.x : 0;
+          const z = user.z != null ? user.z : 0;
+          usersRefs.current[user.id].position.set(x, 0.5, z);
         }
       });
 
-      // Remove Three.js spheres for disconnected users
       Object.keys(usersRefs.current).forEach((userId) => {
         if (!users.find((user) => user.id === userId)) {
           sceneRef.current.remove(usersRefs.current[userId]);
@@ -72,7 +97,6 @@ const App = () => {
       });
     });
 
-    // Clean up on component unmount
     return () => {
       if (socket.current) {
         console.log('Disconnecting socket...');
@@ -82,7 +106,6 @@ const App = () => {
   }, []);
 
   useEffect(() => {
-    // Set up Three.js scene
     const scene = new THREE.Scene();
     sceneRef.current = scene;
 
@@ -95,18 +118,28 @@ const App = () => {
     document.body.appendChild(renderer.domElement);
     rendererRef.current = renderer;
 
+    const light = new THREE.AmbientLight(0x404040);
+    scene.add(light);
+
     const animate = () => {
       requestAnimationFrame(animate);
       renderer.render(scene, camera);
     };
     animate();
 
-    // Clean up Three.js scene and renderer on component unmount
     return () => {
       if (rendererRef.current) {
         rendererRef.current.dispose();
       }
       document.body.removeChild(renderer.domElement);
+    };
+  }, []);
+
+  useEffect(() => {
+    window.addEventListener('keydown', handleMovement);
+
+    return () => {
+      window.removeEventListener('keydown', handleMovement);
     };
   }, []);
 
