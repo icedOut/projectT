@@ -4,6 +4,7 @@ import * as THREE from 'three';
 
 const App = () => {
   const [userName, setUserName] = useState('');
+  const [userColor, setUserColor] = useState('#ffffff'); // Default color is white
   const [connectedUsers, setConnectedUsers] = useState([]);
   const [isValidName, setIsValidName] = useState(false);
   const [isNameSubmitted, setIsNameSubmitted] = useState(false);
@@ -22,9 +23,14 @@ const App = () => {
     setIsValidName(value.length >= 3);
   };
 
+  const handleColorChange = (e) => {
+    setUserColor(e.target.value);
+  };
+
   const handleNameSubmit = () => {
     if (isValidName && socket.current) {
-      socket.current.emit('setName', userName);
+      // Emit both the user name and color to the server
+      socket.current.emit('setNameAndColor', { name: userName, color: userColor });
       setIsNameSubmitted(true);
     }
   };
@@ -70,10 +76,11 @@ const App = () => {
       console.log('Updated user list from server:', users);
       setConnectedUsers(users);
 
+      // Update or create spheres for each user
       users.forEach((user) => {
         if (!usersRefs.current[user.id]) {
           const geometry = new THREE.SphereGeometry(0.5);
-          const material = new THREE.MeshLambertMaterial({ color: Math.random() * 0xffffff });
+          const material = new THREE.MeshLambertMaterial({ color: user.color || '#ffffff' });
           const sphere = new THREE.Mesh(geometry, material);
 
           const x = user.x != null ? user.x : 0;
@@ -86,9 +93,11 @@ const App = () => {
           const x = user.x != null ? user.x : 0;
           const z = user.z != null ? user.z : 0;
           usersRefs.current[user.id].position.set(x, 0.5, z);
+          usersRefs.current[user.id].material.color.set(user.color || '#ffffff'); // Update color
         }
       });
 
+      // Remove spheres for disconnected users
       Object.keys(usersRefs.current).forEach((userId) => {
         if (!users.find((user) => user.id === userId)) {
           sceneRef.current.remove(usersRefs.current[userId]);
@@ -118,7 +127,7 @@ const App = () => {
     document.body.appendChild(renderer.domElement);
     rendererRef.current = renderer;
 
-    const light = new THREE.AmbientLight(0x404040);
+    const light = new THREE.AmbientLight(0x404040); // soft white light
     scene.add(light);
 
     const animate = () => {
@@ -156,6 +165,10 @@ const App = () => {
             placeholder="Enter your name"
             autoFocus
           />
+          <div>
+            <label>Select Your Color: </label>
+            <input type="color" value={userColor} onChange={handleColorChange} />
+          </div>
           <button onClick={handleNameSubmit} disabled={!isValidName}>
             Submit
           </button>
@@ -169,7 +182,11 @@ const App = () => {
           <h2>Connected Users:</h2>
           <ul>
             {connectedUsers.length > 0 ? (
-              connectedUsers.map((user) => <li key={user.id}>{user.name}</li>)
+              connectedUsers.map((user) => (
+                <li key={user.id} style={{ color: user.color }}>
+                  {user.name}
+                </li>
+              ))
             ) : (
               <p>No users connected.</p>
             )}

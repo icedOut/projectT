@@ -24,11 +24,12 @@ let users = {};
 io.on('connection', (socket) => {
   console.log('A user connected:', socket.id);
 
-  // Set user name
-  socket.on('setName', (name) => {
-    users[socket.id] = { id: socket.id, name, x: 0, z: 0 };
-    io.emit('userList', Object.values(users));
-    console.log('User setName:', users[socket.id]);
+  // Set user name and color
+  socket.on('setNameAndColor', (data) => {
+    const { name, color } = data;
+    users[socket.id] = { id: socket.id, name, color, x: 0, z: 0 };
+    io.emit('userList', Object.values(users)); // Emit updated users list with colors
+    console.log('User setNameAndColor:', users[socket.id]);
   });
 
   // Handle user movement
